@@ -10,7 +10,7 @@
 #define T_ARM       18   /* 0.3 mm: start timing the strike          */
 #define T_NOTE_ON   90   /* 1.5 mm: note on, velocity from arm..here */
 #define T_NOTE_OFF  54   /* 0.9 mm: note off (hysteresis)            */
-#define T_AT_START  150  /* 2.5 mm: aftertouch starts                */
+#define T_AT_START  180  /* 3.0 mm: aftertouch starts                */
 #define T_FULL      240
 
 #define VEL_FAST_US 4000.0f   /* strike this fast or faster = 127 */
@@ -18,6 +18,7 @@
 
 #define AT_MIN_STEP     2
 #define AT_INTERVAL_US  10000
+#define AT_DELAY_US     150000 /* a strike that bottoms out is not pressure: wait for a held note */
 
 #define HALL_MIDI_CHANNEL 0
 #define BASE_NOTE    48   /* C3 on Z */
@@ -50,6 +51,7 @@ typedef struct {
     uint8_t     note;       /* note that was sent, so octave shifts never strand a note */
     uint8_t     pressure;
     systime_t   armed_at;
+    systime_t   on_at;
     systime_t   at_sent_at;
 } midi_key_t;
 
@@ -103,6 +105,7 @@ static void note_key(midi_key_t *k, uint8_t offset, uint8_t travel) {
                 k->pressure   = 0;
                 k->phase      = K_ON;
                 k->at_sent_at = now;
+                k->on_at      = now;
                 midi_send_noteon(&midi_device, HALL_MIDI_CHANNEL, k->note, velocity(TIME_I2US(chTimeDiffX(k->armed_at, now))));
             }
             break;
@@ -115,6 +118,7 @@ static void note_key(midi_key_t *k, uint8_t offset, uint8_t travel) {
                 update_channel_pressure();
                 break;
             }
+            if (TIME_I2US(chTimeDiffX(k->on_at, now)) < AT_DELAY_US) break;
             uint8_t p = travel <= T_AT_START ? 0 : (uint8_t)((uint16_t)(travel - T_AT_START) * 127 / (T_FULL - T_AT_START));
             if (p > 127) p = 127;
             if ((p == 0 || p == 127 || abs((int)p - k->pressure) >= AT_MIN_STEP) && p != k->pressure &&
