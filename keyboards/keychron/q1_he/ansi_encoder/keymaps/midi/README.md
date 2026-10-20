@@ -16,6 +16,8 @@ velocity from strike speed, aftertouch from key depth, pressure sliders and drum
 | F1–F4 | pressure sliders CC74, CC71, CC91, CC93 (hold still ~30 ms to set, value stays after release) |
 | F5–F12 | drum pads on channel 10: GM 36 38 42 46 45 50 49 51 |
 | Knob | mod wheel (CC1); press = all notes off |
+| Fn + 1…9 | scale: chromatic, major, minor, major pentatonic, minor pentatonic, dorian, mixolydian, harmonic minor, blues |
+| Fn + note key | root of the scale (pitch of that key); out-of-scale keys are silent and dark, the root is green |
 
 Velocity is the time from 0.3 mm to 1.5 mm (log of 2–200 ms, gamma curve per sensitivity level).
 Polyphonic and channel aftertouch start after a note is held 150 ms, from 2.8 mm to the bottom (4.08 mm).

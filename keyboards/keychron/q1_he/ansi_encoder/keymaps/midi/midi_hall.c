@@ -42,6 +42,21 @@ static const float sensitivity_gamma[] = {1.4f, 1.1f, 0.85f, 0.65f, 0.5f};
 #define FN_ROW 5
 #define FN_COL 10
 
+/* Scales, Fn + 1..9 in MIDI mode: bit n = n semitones above the root. Out-of-scale keys are silent and dark. */
+static const uint16_t scale_masks[] = {
+    0xFFF,                                                        /* 1 chromatic (off) */
+    1 << 0 | 1 << 2 | 1 << 4 | 1 << 5 | 1 << 7 | 1 << 9 | 1 << 11, /* 2 major           */
+    1 << 0 | 1 << 2 | 1 << 3 | 1 << 5 | 1 << 7 | 1 << 8 | 1 << 10, /* 3 natural minor   */
+    1 << 0 | 1 << 2 | 1 << 4 | 1 << 7 | 1 << 9,                   /* 4 major pentatonic */
+    1 << 0 | 1 << 3 | 1 << 5 | 1 << 7 | 1 << 10,                  /* 5 minor pentatonic */
+    1 << 0 | 1 << 2 | 1 << 3 | 1 << 5 | 1 << 7 | 1 << 9 | 1 << 10, /* 6 dorian          */
+    1 << 0 | 1 << 2 | 1 << 4 | 1 << 5 | 1 << 7 | 1 << 9 | 1 << 10, /* 7 mixolydian      */
+    1 << 0 | 1 << 2 | 1 << 3 | 1 << 5 | 1 << 7 | 1 << 8 | 1 << 11, /* 8 harmonic minor  */
+    1 << 0 | 1 << 3 | 1 << 5 | 1 << 6 | 1 << 7 | 1 << 10,         /* 9 blues           */
+};
+#define SCALES (sizeof(scale_masks) / sizeof(scale_masks[0]))
+#define SCALE_ROW 1   /* number row: 1..9 = columns 1..9 */
+
 /* key_map codes: < PAD0 semitone offset from BASE_NOTE, then pads, sliders and controls. */
 enum {
     PAD0 = 0x40,
@@ -83,6 +98,7 @@ typedef struct {
     systime_t   armed_at;
     systime_t   on_at;
     systime_t   at_sent_at;
+    bool        fn_latch;   /* used with Fn: ignored as a note until released */
 } midi_key_t;
 
 typedef struct {
@@ -100,6 +116,8 @@ static bool       sustain;
 static uint8_t    mod_wheel;
 static uint8_t    channel_pressure;
 static uint8_t    sensitivity = SENSITIVITY_DEFAULT;
+static uint8_t    scale;       /* index into scale_masks, 0 = chromatic */
+static uint8_t    scale_root;  /* pitch class 0..11 */
 
 bool midi_hall_enabled(void) {
     return enabled;
@@ -107,6 +125,15 @@ bool midi_hall_enabled(void) {
 
 static bool fn_held(void) {
     return analog_matrix_get_travel(FN_ROW, FN_COL) >= T_NOTE_ON;
+}
+
+static int16_t melodic_note(uint8_t offset) {
+    return BASE_NOTE + offset + 12 * octave + transpose;
+}
+
+static bool in_scale(int16_t note) {
+    uint8_t step = (uint8_t)((note % 12 + 12 - scale_root) % 12);
+    return scale_masks[scale] & (1 << step);
 }
 
 static uint8_t velocity(uint32_t us) {
@@ -205,19 +232,42 @@ static void control_key(midi_key_t *k, uint8_t code, uint8_t travel) {
     }
 }
 
+/* Fn + number row picks the scale, Fn + a note key sets its pitch as the root.
+ * Returns true when the key belongs to Fn (also below the press point, so it never arms a note). */
+static bool fn_action(midi_key_t *k, uint8_t r, uint8_t c, uint8_t code, uint8_t travel) {
+    bool scale_key = r == SCALE_ROW && c >= 1 && c <= SCALES;
+    if (!scale_key && code >= PAD0) return false;     /* pads, sliders and controls keep their Fn meaning */
+    if (k->phase != K_IDLE) return false;             /* a note started before Fn plays on until released */
+    if (travel >= T_NOTE_ON) {
+        if (scale_key) scale = c - 1;
+        else           scale_root = (uint8_t)((melodic_note(code) % 12 + 12) % 12);
+        k->fn_latch = true;
+    }
+    return true;
+}
+
 bool analog_matrix_midi_hook(analog_key_t *key) {
     if (!enabled) return false;
     uint8_t code = key_map[key->r][key->c];
-    if (code == NONE) return false;
     midi_key_t *k = &keys[key->r][key->c];
+    if (k->fn_latch) {
+        if (key->travel < T_NOTE_OFF) k->fn_latch = false;
+        return true;
+    }
+    if (fn_held() && fn_action(k, key->r, key->c, code, key->travel)) return true;
+    if (code == NONE) return false;
     if (code >= OCT_DOWN)
         control_key(k, code, key->travel);
     else if (code >= SLIDER0)
         ; /* sampled in midi_hall_task(), so a key held still keeps updating */
     else if (code >= PAD0)
         note_key(k, pad_notes[code - PAD0], DRUM_CHANNEL, false, key->travel);
-    else
-        note_key(k, BASE_NOTE + code + 12 * octave + transpose, HALL_MIDI_CHANNEL, true, key->travel);
+    else {
+        int16_t note = melodic_note(code);
+        /* out-of-scale keys are silent; a note already sounding is still released */
+        if (k->phase != K_ON && !in_scale(note)) note = -1;
+        note_key(k, note, HALL_MIDI_CHANNEL, true, key->travel);
+    }
     return true;
 }
 
@@ -249,6 +299,7 @@ void midi_hall_panic(void) {
             if (k->phase == K_ON && key_map[r][c] < SLIDER0) midi_send_noteoff(&midi_device, k->channel, k->note, 0);
             k->phase    = K_IDLE;
             k->pressure = 0;
+            k->fn_latch = false;
         }
     if (sustain) midi_send_cc(&midi_device, HALL_MIDI_CHANNEL, 64, 0);
     sustain = false;
@@ -283,6 +334,10 @@ void midi_hall_indicators(uint8_t led_min, uint8_t led_max) {
                 /* while Fn is held, F1..F5 show the velocity sensitivity level */
                 bool on = c - 1 <= sensitivity;
                 rgb_matrix_set_color(led, on ? 255 : 20, on ? 200 : 20, on ? 0 : 20);
+            } else if (fn && r == SCALE_ROW && c >= 1 && c <= SCALES) {
+                /* and the number row shows the selected scale */
+                bool sel = c - 1 == scale;
+                rgb_matrix_set_color(led, sel ? 255 : 30, sel ? 200 : 30, sel ? 0 : 30);
             } else if (code == NONE) {
                 rgb_matrix_set_color(led, 0, 0, 0);
             } else if (code >= OCT_DOWN) {
@@ -299,6 +354,10 @@ void midi_hall_indicators(uint8_t led_min, uint8_t led_max) {
                 /* orange, brighter with aftertouch */
                 uint8_t v = 120 + k->pressure;
                 rgb_matrix_set_color(led, v, v * 2 / 5, 0);
+            } else if (!in_scale(melodic_note(code))) {
+                rgb_matrix_set_color(led, 0, 0, 0);
+            } else if ((melodic_note(code) % 12 + 12) % 12 == scale_root && scale != 0) {
+                rgb_matrix_set_color(led, 0, 160, 40); /* root */
             } else {
                 bool black = (1 << (code % 12)) & 0x54A; /* C# D# F# G# A# */
                 if (black) rgb_matrix_set_color(led, 0, 0, 90);
