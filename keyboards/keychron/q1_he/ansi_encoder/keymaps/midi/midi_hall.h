@@ -9,6 +9,9 @@
 #include <stdint.h>
 
 void midi_hall_toggle(void);
+
+/* Call every scan: samples the pressure sliders (F1-F4). */
+void midi_hall_task(void);
 bool midi_hall_enabled(void);
 
 /* Knob and helper keys, called from process_record_user while MIDI mode is on. */

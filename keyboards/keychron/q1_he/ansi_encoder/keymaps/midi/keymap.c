@@ -102,3 +102,7 @@ bool rgb_matrix_indicators_advanced_user(uint8_t led_min, uint8_t led_max) {
     midi_hall_indicators(led_min, led_max);
     return true;
 }
+
+void matrix_scan_user(void) {
+    midi_hall_task();
+}
