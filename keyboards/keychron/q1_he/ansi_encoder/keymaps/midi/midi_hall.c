@@ -15,10 +15,11 @@
 #define T_FULL      240
 
 /* Velocity: log of the arm..note-on time mapped to 0..1, then shaped by the sensitivity curve. */
-#define VEL_FAST_US 2500.0f   /* strike this fast or faster = 127 */
-#define VEL_SLOW_US 100000.0f /* strike this slow or slower = 1   */
+#define VEL_FAST_US 2000.0f   /* strike this fast or faster = 127 */
+#define VEL_SLOW_US 200000.0f /* strike this slow or slower = 1 (slow, careful presses still sound) */
 /* Fn + Up/Down in MIDI mode; < 1 = softer touch reaches loud notes, > 1 = harder. */
-static const float sensitivity_gamma[] = {1.6f, 1.25f, 1.0f, 0.8f, 0.6f};
+/* Tuned on the owner's playing: soft ~30, normal ~75, hard ~110+ at the default level. */
+static const float sensitivity_gamma[] = {1.4f, 1.1f, 0.85f, 0.65f, 0.5f};
 #define SENSITIVITY_LEVELS (sizeof(sensitivity_gamma) / sizeof(sensitivity_gamma[0]))
 #define SENSITIVITY_DEFAULT 2
 
