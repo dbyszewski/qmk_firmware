@@ -11,8 +11,8 @@
 #define T_ARM       18   /* 0.3 mm: start timing the strike          */
 #define T_NOTE_ON   90   /* 1.5 mm: note on, velocity from arm..here */
 #define T_NOTE_OFF  54   /* 0.9 mm: note off (hysteresis)            */
-#define T_AT_START  180  /* 3.0 mm: aftertouch starts                */
-#define T_FULL      240
+#define T_AT_START  168  /* 2.8 mm: aftertouch starts                */
+#define T_FULL      245  /* measured: every key reaches 4.08 mm      */
 
 /* Velocity: log of the arm..note-on time mapped to 0..1, then shaped by the sensitivity curve. */
 #define VEL_FAST_US 2000.0f   /* strike this fast or faster = 127 */
@@ -34,8 +34,8 @@ static const float sensitivity_gamma[] = {1.4f, 1.1f, 0.85f, 0.65f, 0.5f};
 #define SUSTAIN_OFF  36   /* 0.6 mm */
 
 /* Pressure sliders: the value follows the key while it is held still and stays after release. */
-#define SLIDER_MIN     24     /* 0.4 mm = 0   */
-#define SLIDER_MAX     216    /* 3.6 mm = 127 */
+#define SLIDER_MIN     18     /* 0.3 mm = 0   */
+#define SLIDER_MAX     234    /* 3.9 mm = 127 */
 #define SLIDER_JITTER  3
 #define SLIDER_HOLD_US 30000  /* a release is faster than this, so it does not move the value */
 
