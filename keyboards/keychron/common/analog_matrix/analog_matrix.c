@@ -668,6 +668,11 @@ void analog_matrix_init(void) {
         matrix_scan();
 }
 
+// Lets a keymap take over a key's travel (e.g. MIDI mode). Return true to skip normal key actions.
+__attribute__((weak)) bool analog_matrix_midi_hook(analog_key_t *key) {
+    return false;
+}
+
 bool update_raw_value(uint8_t row, uint8_t col, uint16_t value) {
     if (value < VALID_ANALOG_RAW_VALUE_MIN || value > VALID_ANALOG_RAW_VALUE_MAX) return false;
 
@@ -689,6 +694,8 @@ bool update_raw_value(uint8_t row, uint8_t col, uint16_t value) {
     if (k->travel == k->last_travel) return false;
 
     k->last_travel = k->travel;
+
+    if (analog_matrix_midi_hook(k)) return false;
 
     bool ret = false;
 
