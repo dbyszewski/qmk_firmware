@@ -2,6 +2,7 @@
 #include QMK_KEYBOARD_H
 #include <ch.h>
 #include <math.h>
+#include <string.h>
 #include "qmk_midi.h"
 #include "analog_matrix.h"
 #include "analog_matrix_type.h"
@@ -123,6 +124,43 @@ static uint8_t    channel_pressure;
 static uint8_t    sensitivity = SENSITIVITY_DEFAULT;
 static uint8_t    scale;       /* index into scale_masks, 0 = chromatic */
 static uint8_t    scale_root;  /* pitch class 0..11 */
+
+/* Notes the host is playing (e.g. a DAW track sent to this port), shown on the keys. */
+static uint8_t    remote_notes[16];       /* bitset of 128 notes, melodic channels */
+static uint8_t    remote_drums[16];       /* bitset of 128 notes, channel 10 */
+
+static bool bit_get(const uint8_t *set, uint8_t n) {
+    return set[n >> 3] & (1 << (n & 7));
+}
+
+static void bit_set(uint8_t *set, uint8_t n, bool on) {
+    if (on) set[n >> 3] |= (uint8_t)(1 << (n & 7));
+    else    set[n >> 3] &= (uint8_t)~(1 << (n & 7));
+}
+
+static void remote_note(uint8_t chan, uint8_t note, bool on) {
+    bit_set(chan == DRUM_CHANNEL ? remote_drums : remote_notes, note & 0x7F, on);
+}
+
+static void remote_note_on(MidiDevice *device, uint8_t status, uint8_t note, uint8_t vel) {
+    remote_note(status & 0x0F, note, vel > 0); /* velocity 0 = note off */
+}
+
+static void remote_note_off(MidiDevice *device, uint8_t status, uint8_t note, uint8_t vel) {
+    remote_note(status & 0x0F, note, false);
+}
+
+static void remote_cc(MidiDevice *device, uint8_t chan, uint8_t num, uint8_t val) {
+    if (num == 120 || num == 123) { /* all sound / all notes off */
+        memset((chan & 0x0F) == DRUM_CHANNEL ? remote_drums : remote_notes, 0, sizeof(remote_notes));
+    }
+}
+
+void midi_hall_init(void) {
+    midi_register_noteon_callback(&midi_device, remote_note_on);
+    midi_register_noteoff_callback(&midi_device, remote_note_off);
+    midi_register_cc_callback(&midi_device, remote_cc);
+}
 
 bool midi_hall_enabled(void) {
     return enabled;
@@ -372,12 +410,15 @@ void midi_hall_indicators(uint8_t led_min, uint8_t led_max) {
                 uint8_t v = 15 + sliders[code - SLIDER0].value * 2 - sliders[code - SLIDER0].value / 8;
                 rgb_matrix_set_color(led, 0, v, v);
             } else if (code >= PAD0) {
-                if (k->phase == K_ON) rgb_matrix_set_color(led, 255, 40, 40);
-                else                  rgb_matrix_set_color(led, 70, 0, 0);
+                if (k->phase == K_ON)                                 rgb_matrix_set_color(led, 255, 40, 40);
+                else if (bit_get(remote_drums, pad_notes[code - PAD0])) rgb_matrix_set_color(led, 0, 200, 160);
+                else                                                  rgb_matrix_set_color(led, 70, 0, 0);
             } else if (k->phase == K_ON) {
                 /* orange, brighter with aftertouch */
                 uint8_t v = 120 + k->pressure;
                 rgb_matrix_set_color(led, v, v * 2 / 5, 0);
+            } else if (melodic_note(code) >= 0 && melodic_note(code) <= 127 && bit_get(remote_notes, (uint8_t)melodic_note(code))) {
+                rgb_matrix_set_color(led, 0, 200, 160); /* played by the host */
             } else if (!in_scale(melodic_note(code))) {
                 rgb_matrix_set_color(led, 0, 0, 0);
             } else if ((melodic_note(code) % 12 + 12) % 12 == scale_root && scale != 0) {

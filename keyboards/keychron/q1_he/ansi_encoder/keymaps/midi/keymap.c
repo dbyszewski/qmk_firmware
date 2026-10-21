@@ -106,3 +106,7 @@ bool rgb_matrix_indicators_advanced_user(uint8_t led_min, uint8_t led_max) {
 void matrix_scan_user(void) {
     midi_hall_task();
 }
+
+void keyboard_post_init_user(void) {
+    midi_hall_init();
+}

@@ -8,6 +8,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+/* Register MIDI input callbacks (notes from the host light the keys). Call once after USB MIDI setup. */
+void midi_hall_init(void);
+
 void midi_hall_toggle(void);
 
 /* Call every scan: samples the pressure sliders (F1-F4). */
