@@ -17,6 +17,7 @@ velocity from strike speed, aftertouch from key depth, pressure sliders and drum
 | F5–F12 | drum pads on channel 10: GM 36 38 42 46 45 50 49 51 |
 | Knob | mod wheel (CC1); press = all notes off |
 | Fn + 1…9 | scale: chromatic, major, minor, major pentatonic, minor pentatonic, dorian, mixolydian, harmonic minor, blues |
+| Notes from the host | keys light teal while the host plays them (e.g. a DAW track sent to this port); notes outside the keys' range light their pitch class dimmed, channel 10 lights the pads |
 | Fn + note key | root of the scale (pitch of that key); out-of-scale keys are silent and dark, the root is green |
 
 Velocity is the time from 0.3 mm to 1.5 mm (log of 2–200 ms, gamma curve per sensitivity level).

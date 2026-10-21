@@ -383,9 +383,19 @@ void midi_hall_mod_wheel(int8_t delta) {
     midi_send_cc(&midi_device, HALL_MIDI_CHANNEL, 1, mod_wheel);
 }
 
+/* Pitch classes of host notes outside the keys' range: shown dimmed on every key of that pitch class. */
+static uint16_t remote_folded(void) {
+    int16_t  lo = melodic_note(0), hi = melodic_note(31);
+    uint16_t pcs = 0;
+    for (uint8_t n = 0; n < 128; n++)
+        if ((n < lo || n > hi) && bit_get(remote_notes, n)) pcs |= 1 << (n % 12);
+    return pcs;
+}
+
 void midi_hall_indicators(uint8_t led_min, uint8_t led_max) {
     if (!enabled) return;
-    bool fn = fn_held();
+    bool     fn     = fn_held();
+    uint16_t folded = remote_folded();
     for (uint8_t r = 0; r < MATRIX_ROWS; r++)
         for (uint8_t c = 0; c < MATRIX_COLS; c++) {
             uint8_t led = g_led_config.matrix_co[r][c];
@@ -419,6 +429,8 @@ void midi_hall_indicators(uint8_t led_min, uint8_t led_max) {
                 rgb_matrix_set_color(led, v, v * 2 / 5, 0);
             } else if (melodic_note(code) >= 0 && melodic_note(code) <= 127 && bit_get(remote_notes, (uint8_t)melodic_note(code))) {
                 rgb_matrix_set_color(led, 0, 200, 160); /* played by the host */
+            } else if (melodic_note(code) >= 0 && (folded & (1 << (melodic_note(code) % 12)))) {
+                rgb_matrix_set_color(led, 0, 60, 50); /* same note in an octave the keys do not reach */
             } else if (!in_scale(melodic_note(code))) {
                 rgb_matrix_set_color(led, 0, 0, 0);
             } else if ((melodic_note(code) % 12 + 12) % 12 == scale_root && scale != 0) {
