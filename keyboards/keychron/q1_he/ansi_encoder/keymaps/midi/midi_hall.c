@@ -57,6 +57,10 @@ static const uint16_t scale_masks[] = {
 #define SCALES (sizeof(scale_masks) / sizeof(scale_masks[0]))
 #define SCALE_ROW 1   /* number row: 1..9 = columns 1..9 */
 
+#define KNOB_COL 14
+#define ESC_COL  0
+#define DEL_COL  13
+
 /* key_map codes: < PAD0 semitone offset from BASE_NOTE, then pads, sliders and controls. */
 enum {
     PAD0 = 0x40,
@@ -99,6 +103,7 @@ typedef struct {
     systime_t   on_at;
     systime_t   at_sent_at;
     bool        fn_latch;   /* used with Fn: ignored as a note until released */
+    bool        pass;       /* typing key let through in MIDI mode until released */
 } midi_key_t;
 
 typedef struct {
@@ -246,6 +251,21 @@ static bool fn_action(midi_key_t *k, uint8_t r, uint8_t c, uint8_t code, uint8_t
     return true;
 }
 
+/* In MIDI mode only Fn and the knob type; Esc and Del pass with Fn (MIDI toggle, bootloader).
+ * A key that passes keeps passing until released, so its release is never swallowed. */
+static bool passes(midi_key_t *k, uint8_t r, uint8_t c, uint8_t travel) {
+    if ((r == FN_ROW && c == FN_COL) || (r == 0 && c == KNOB_COL)) return true;
+    if (k->pass) {
+        if (travel < T_ARM) k->pass = false;
+        return true;
+    }
+    if (r == 0 && (c == ESC_COL || c == DEL_COL) && fn_held() && travel >= T_ARM) {
+        k->pass = true;
+        return true;
+    }
+    return false;
+}
+
 bool analog_matrix_midi_hook(analog_key_t *key) {
     if (!enabled) return false;
     uint8_t code = key_map[key->r][key->c];
@@ -255,7 +275,7 @@ bool analog_matrix_midi_hook(analog_key_t *key) {
         return true;
     }
     if (fn_held() && fn_action(k, key->r, key->c, code, key->travel)) return true;
-    if (code == NONE) return false;
+    if (code == NONE) return !passes(k, key->r, key->c, key->travel);
     if (code >= OCT_DOWN)
         control_key(k, code, key->travel);
     else if (code >= SLIDER0)
@@ -312,6 +332,10 @@ void midi_hall_panic(void) {
 void midi_hall_toggle(void) {
     if (enabled) midi_hall_panic();
     enabled = !enabled;
+    /* keys held right now (Fn+Esc that switched MIDI on) must still reach their release */
+    for (uint8_t r = 0; r < MATRIX_ROWS; r++)
+        for (uint8_t c = 0; c < MATRIX_COLS; c++)
+            keys[r][c].pass = enabled && analog_matrix_get_travel(r, c) >= T_ARM;
     clear_keyboard(); /* nothing typed before the switch stays held */
 }
 

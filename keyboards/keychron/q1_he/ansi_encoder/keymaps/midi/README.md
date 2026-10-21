@@ -21,7 +21,7 @@ velocity from strike speed, aftertouch from key depth, pressure sliders and drum
 
 Velocity is the time from 0.3 mm to 1.5 mm (log of 2–200 ms, gamma curve per sensitivity level).
 Polyphonic and channel aftertouch start after a note is held 150 ms, from 2.8 mm to the bottom (4.08 mm).
-Keys outside the map type normally, so Fn+Esc always works.
+Other keys are silent in MIDI mode, except Fn, the knob, and Esc/Del together with Fn (Fn+Esc, Fn+Del).
 
 Other changes against the stock `keychron` keymap:
 
